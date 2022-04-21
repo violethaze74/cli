@@ -18,6 +18,7 @@ type iconfig interface {
 	Get(string, string) (string, error)
 	Set(string, string, string) error
 	Write() error
+	WriteHosts() error
 }
 
 type LoginOptions struct {
@@ -29,6 +30,7 @@ type LoginOptions struct {
 	Web         bool
 	Scopes      []string
 	Executable  string
+	GitProtocol string
 
 	sshContext sshContext
 }
@@ -39,8 +41,8 @@ func Login(opts *LoginOptions) error {
 	httpClient := opts.HTTPClient
 	cs := opts.IO.ColorScheme()
 
-	var gitProtocol string
-	if opts.Interactive {
+	gitProtocol := strings.ToLower(opts.GitProtocol)
+	if opts.Interactive && gitProtocol == "" {
 		var proto string
 		err := prompt.SurveyAskOne(&survey.Select{
 			Message: "What is your preferred protocol for Git operations?",
@@ -172,7 +174,7 @@ func Login(opts *LoginOptions) error {
 		fmt.Fprintf(opts.IO.ErrOut, "%s Configured git protocol\n", cs.SuccessIcon())
 	}
 
-	err := cfg.Write()
+	err := cfg.WriteHosts()
 	if err != nil {
 		return err
 	}

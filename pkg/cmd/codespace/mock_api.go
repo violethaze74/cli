@@ -25,6 +25,9 @@ import (
 // 			DeleteCodespaceFunc: func(ctx context.Context, name string) error {
 // 				panic("mock out the DeleteCodespace method")
 // 			},
+// 			EditCodespaceFunc: func(ctx context.Context, codespaceName string, params *api.EditCodespaceParams) (*api.Codespace, error) {
+// 				panic("mock out the EditCodespace method")
+// 			},
 // 			GetCodespaceFunc: func(ctx context.Context, name string, includeConnection bool) (*api.Codespace, error) {
 // 				panic("mock out the GetCodespace method")
 // 			},
@@ -49,6 +52,9 @@ import (
 // 			ListCodespacesFunc: func(ctx context.Context, limit int) ([]*api.Codespace, error) {
 // 				panic("mock out the ListCodespaces method")
 // 			},
+// 			ListDevContainersFunc: func(ctx context.Context, repoID int, branch string, limit int) ([]api.DevContainerEntry, error) {
+// 				panic("mock out the ListDevContainers method")
+// 			},
 // 			StartCodespaceFunc: func(ctx context.Context, name string) error {
 // 				panic("mock out the StartCodespace method")
 // 			},
@@ -70,6 +76,9 @@ type apiClientMock struct {
 
 	// DeleteCodespaceFunc mocks the DeleteCodespace method.
 	DeleteCodespaceFunc func(ctx context.Context, name string) error
+
+	// EditCodespaceFunc mocks the EditCodespace method.
+	EditCodespaceFunc func(ctx context.Context, codespaceName string, params *api.EditCodespaceParams) (*api.Codespace, error)
 
 	// GetCodespaceFunc mocks the GetCodespace method.
 	GetCodespaceFunc func(ctx context.Context, name string, includeConnection bool) (*api.Codespace, error)
@@ -94,6 +103,9 @@ type apiClientMock struct {
 
 	// ListCodespacesFunc mocks the ListCodespaces method.
 	ListCodespacesFunc func(ctx context.Context, limit int) ([]*api.Codespace, error)
+
+	// ListDevContainersFunc mocks the ListDevContainers method.
+	ListDevContainersFunc func(ctx context.Context, repoID int, branch string, limit int) ([]api.DevContainerEntry, error)
 
 	// StartCodespaceFunc mocks the StartCodespace method.
 	StartCodespaceFunc func(ctx context.Context, name string) error
@@ -123,6 +135,15 @@ type apiClientMock struct {
 			Ctx context.Context
 			// Name is the name argument value.
 			Name string
+		}
+		// EditCodespace holds details about calls to the EditCodespace method.
+		EditCodespace []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// CodespaceName is the codespaceName argument value.
+			CodespaceName string
+			// Params is the params argument value.
+			Params *api.EditCodespaceParams
 		}
 		// GetCodespace holds details about calls to the GetCodespace method.
 		GetCodespace []struct {
@@ -186,6 +207,17 @@ type apiClientMock struct {
 			// Limit is the limit argument value.
 			Limit int
 		}
+		// ListDevContainers holds details about calls to the ListDevContainers method.
+		ListDevContainers []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// RepoID is the repoID argument value.
+			RepoID int
+			// Branch is the branch argument value.
+			Branch string
+			// Limit is the limit argument value.
+			Limit int
+		}
 		// StartCodespace holds details about calls to the StartCodespace method.
 		StartCodespace []struct {
 			// Ctx is the ctx argument value.
@@ -204,6 +236,7 @@ type apiClientMock struct {
 	lockAuthorizedKeys                 sync.RWMutex
 	lockCreateCodespace                sync.RWMutex
 	lockDeleteCodespace                sync.RWMutex
+	lockEditCodespace                  sync.RWMutex
 	lockGetCodespace                   sync.RWMutex
 	lockGetCodespaceRegionLocation     sync.RWMutex
 	lockGetCodespaceRepoSuggestions    sync.RWMutex
@@ -212,6 +245,7 @@ type apiClientMock struct {
 	lockGetRepository                  sync.RWMutex
 	lockGetUser                        sync.RWMutex
 	lockListCodespaces                 sync.RWMutex
+	lockListDevContainers              sync.RWMutex
 	lockStartCodespace                 sync.RWMutex
 	lockStopCodespace                  sync.RWMutex
 }
@@ -318,6 +352,45 @@ func (mock *apiClientMock) DeleteCodespaceCalls() []struct {
 	mock.lockDeleteCodespace.RLock()
 	calls = mock.calls.DeleteCodespace
 	mock.lockDeleteCodespace.RUnlock()
+	return calls
+}
+
+// EditCodespace calls EditCodespaceFunc.
+func (mock *apiClientMock) EditCodespace(ctx context.Context, codespaceName string, params *api.EditCodespaceParams) (*api.Codespace, error) {
+	if mock.EditCodespaceFunc == nil {
+		panic("apiClientMock.EditCodespaceFunc: method is nil but apiClient.EditCodespace was just called")
+	}
+	callInfo := struct {
+		Ctx           context.Context
+		CodespaceName string
+		Params        *api.EditCodespaceParams
+	}{
+		Ctx:           ctx,
+		CodespaceName: codespaceName,
+		Params:        params,
+	}
+	mock.lockEditCodespace.Lock()
+	mock.calls.EditCodespace = append(mock.calls.EditCodespace, callInfo)
+	mock.lockEditCodespace.Unlock()
+	return mock.EditCodespaceFunc(ctx, codespaceName, params)
+}
+
+// EditCodespaceCalls gets all the calls that were made to EditCodespace.
+// Check the length with:
+//     len(mockedapiClient.EditCodespaceCalls())
+func (mock *apiClientMock) EditCodespaceCalls() []struct {
+	Ctx           context.Context
+	CodespaceName string
+	Params        *api.EditCodespaceParams
+} {
+	var calls []struct {
+		Ctx           context.Context
+		CodespaceName string
+		Params        *api.EditCodespaceParams
+	}
+	mock.lockEditCodespace.RLock()
+	calls = mock.calls.EditCodespace
+	mock.lockEditCodespace.RUnlock()
 	return calls
 }
 
@@ -610,6 +683,49 @@ func (mock *apiClientMock) ListCodespacesCalls() []struct {
 	mock.lockListCodespaces.RLock()
 	calls = mock.calls.ListCodespaces
 	mock.lockListCodespaces.RUnlock()
+	return calls
+}
+
+// ListDevContainers calls ListDevContainersFunc.
+func (mock *apiClientMock) ListDevContainers(ctx context.Context, repoID int, branch string, limit int) ([]api.DevContainerEntry, error) {
+	if mock.ListDevContainersFunc == nil {
+		panic("apiClientMock.ListDevContainersFunc: method is nil but apiClient.ListDevContainers was just called")
+	}
+	callInfo := struct {
+		Ctx    context.Context
+		RepoID int
+		Branch string
+		Limit  int
+	}{
+		Ctx:    ctx,
+		RepoID: repoID,
+		Branch: branch,
+		Limit:  limit,
+	}
+	mock.lockListDevContainers.Lock()
+	mock.calls.ListDevContainers = append(mock.calls.ListDevContainers, callInfo)
+	mock.lockListDevContainers.Unlock()
+	return mock.ListDevContainersFunc(ctx, repoID, branch, limit)
+}
+
+// ListDevContainersCalls gets all the calls that were made to ListDevContainers.
+// Check the length with:
+//     len(mockedapiClient.ListDevContainersCalls())
+func (mock *apiClientMock) ListDevContainersCalls() []struct {
+	Ctx    context.Context
+	RepoID int
+	Branch string
+	Limit  int
+} {
+	var calls []struct {
+		Ctx    context.Context
+		RepoID int
+		Branch string
+		Limit  int
+	}
+	mock.lockListDevContainers.RLock()
+	calls = mock.calls.ListDevContainers
+	mock.lockListDevContainers.RUnlock()
 	return calls
 }
 

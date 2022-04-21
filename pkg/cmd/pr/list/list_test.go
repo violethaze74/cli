@@ -183,7 +183,7 @@ func TestPRList_filteringAssignee(t *testing.T) {
 	http.Register(
 		httpmock.GraphQL(`query PullRequestSearch\b`),
 		httpmock.GraphQLQuery(`{}`, func(_ string, params map[string]interface{}) {
-			assert.Equal(t, `repo:OWNER/REPO is:pr is:merged assignee:hubot label:"needs tests" base:develop`, params["q"].(string))
+			assert.Equal(t, `assignee:hubot base:develop label:"needs tests" repo:OWNER/REPO state:merged type:pr`, params["q"].(string))
 		}))
 
 	_, err := runCommand(http, true, `-s merged -l "needs tests" -a hubot -B develop`)
@@ -201,12 +201,59 @@ func TestPRList_filteringDraft(t *testing.T) {
 		{
 			name:          "draft",
 			cli:           "--draft",
-			expectedQuery: `repo:OWNER/REPO is:pr is:open draft:true`,
+			expectedQuery: `draft:true repo:OWNER/REPO state:open type:pr`,
 		},
 		{
 			name:          "non-draft",
 			cli:           "--draft=false",
-			expectedQuery: `repo:OWNER/REPO is:pr is:open draft:false`,
+			expectedQuery: `draft:false repo:OWNER/REPO state:open type:pr`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			http := initFakeHTTP()
+			defer http.Verify(t)
+
+			http.Register(
+				httpmock.GraphQL(`query PullRequestSearch\b`),
+				httpmock.GraphQLQuery(`{}`, func(_ string, params map[string]interface{}) {
+					assert.Equal(t, test.expectedQuery, params["q"].(string))
+				}))
+
+			_, err := runCommand(http, true, test.cli)
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestPRList_filteringAuthor(t *testing.T) {
+	tests := []struct {
+		name          string
+		cli           string
+		expectedQuery string
+	}{
+		{
+			name:          "author @me",
+			cli:           `--author "@me"`,
+			expectedQuery: `author:@me repo:OWNER/REPO state:open type:pr`,
+		},
+		{
+			name:          "author user",
+			cli:           `--author "monalisa"`,
+			expectedQuery: `author:monalisa repo:OWNER/REPO state:open type:pr`,
+		},
+		{
+			name:          "app author",
+			cli:           `--author "app/dependabot"`,
+			expectedQuery: `author:app/dependabot repo:OWNER/REPO state:open type:pr`,
+		},
+		{
+			name:          "app author with app option",
+			cli:           `--app "dependabot"`,
+			expectedQuery: `author:app/dependabot repo:OWNER/REPO state:open type:pr`,
 		},
 	}
 
@@ -245,17 +292,17 @@ func TestPRList_web(t *testing.T) {
 		{
 			name:               "filters",
 			cli:                "-a peter -l bug -l docs -L 10 -s merged -B trunk",
-			expectedBrowserURL: "https://github.com/OWNER/REPO/pulls?q=is%3Apr+is%3Amerged+assignee%3Apeter+label%3Abug+label%3Adocs+base%3Atrunk",
+			expectedBrowserURL: "https://github.com/OWNER/REPO/pulls?q=assignee%3Apeter+base%3Atrunk+label%3Abug+label%3Adocs+state%3Amerged+type%3Apr",
 		},
 		{
 			name:               "draft",
 			cli:                "--draft=true",
-			expectedBrowserURL: "https://github.com/OWNER/REPO/pulls?q=is%3Apr+is%3Aopen+draft%3Atrue",
+			expectedBrowserURL: "https://github.com/OWNER/REPO/pulls?q=draft%3Atrue+state%3Aopen+type%3Apr",
 		},
 		{
 			name:               "non-draft",
 			cli:                "--draft=0",
-			expectedBrowserURL: "https://github.com/OWNER/REPO/pulls?q=is%3Apr+is%3Aopen+draft%3Afalse",
+			expectedBrowserURL: "https://github.com/OWNER/REPO/pulls?q=draft%3Afalse+state%3Aopen+type%3Apr",
 		},
 	}
 

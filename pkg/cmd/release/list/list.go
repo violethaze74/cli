@@ -28,9 +28,10 @@ func NewCmdList(f *cmdutil.Factory, runF func(*ListOptions) error) *cobra.Comman
 	}
 
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List releases in a repository",
-		Args:  cobra.NoArgs,
+		Use:     "list",
+		Short:   "List releases in a repository",
+		Aliases: []string{"ls"},
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// support `-R, --repo` override
 			opts.BaseRepo = f.BaseRepo
@@ -72,7 +73,6 @@ func listRun(opts *ListOptions) error {
 	now := time.Now()
 	table := utils.NewTablePrinter(opts.IO)
 	iofmt := opts.IO.ColorScheme()
-	seenLatest := false
 	for _, rel := range releases {
 		title := text.ReplaceExcessiveWhitespace(rel.Name)
 		if title == "" {
@@ -82,10 +82,9 @@ func listRun(opts *ListOptions) error {
 
 		badge := ""
 		var badgeColor func(string) string
-		if !rel.IsDraft && !rel.IsPrerelease && !seenLatest {
+		if rel.IsLatest {
 			badge = "Latest"
 			badgeColor = iofmt.Green
-			seenLatest = true
 		} else if rel.IsDraft {
 			badge = "Draft"
 			badgeColor = iofmt.Red

@@ -109,6 +109,7 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 			Create a release and start a discussion
 			$ gh release create v1.2.3 --discussion-category "General"
 		`),
+		Aliases: []string{"new"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("discussion-category") && opts.Draft {
 				return errors.New("discussions for draft releases not supported")
@@ -157,7 +158,7 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 	cmd.Flags().StringVarP(&opts.Name, "title", "t", "", "Release title")
 	cmd.Flags().StringVarP(&opts.Body, "notes", "n", "", "Release notes")
 	cmd.Flags().StringVarP(&notesFile, "notes-file", "F", "", "Read release notes from `file` (use \"-\" to read from standard input)")
-	cmd.Flags().StringVarP(&opts.DiscussionCategory, "discussion-category", "", "", "Start a discussion of the specified category")
+	cmd.Flags().StringVarP(&opts.DiscussionCategory, "discussion-category", "", "", "Start a discussion in the specified category")
 	cmd.Flags().BoolVarP(&opts.GenerateNotes, "generate-notes", "", false, "Automatically generate title and notes for the release")
 
 	return cmd
@@ -174,6 +175,7 @@ func createRun(opts *CreateOptions) error {
 		return err
 	}
 
+	var existingTag bool
 	if opts.TagName == "" {
 		tags, err := getTags(httpClient, baseRepo, 5)
 		if err != nil {
@@ -198,6 +200,7 @@ func createRun(opts *CreateOptions) error {
 				return fmt.Errorf("could not prompt: %w", err)
 			}
 			if tag != createNewTagOption {
+				existingTag = true
 				opts.TagName = tag
 			}
 		}
@@ -213,6 +216,29 @@ func createRun(opts *CreateOptions) error {
 		}
 	}
 
+	var tagDescription string
+	if opts.RepoOverride == "" {
+		tagDescription, _ = gitTagInfo(opts.TagName)
+		// If there is a local tag with the same name as specified
+		// the user may not want to create a new tag on the remote
+		// as the local one might be annotated or signed.
+		// If the user specifies the target take that as explict instruction
+		// to create the tag on the remote pointing to the target regardless
+		// of local tag status.
+		// If a remote tag with the same name as specified exists already
+		// then a new tag will not be created so ignore local tag status.
+		if tagDescription != "" && !existingTag && opts.Target == "" {
+			remoteExists, err := remoteTagExists(httpClient, baseRepo, opts.TagName)
+			if err != nil {
+				return err
+			}
+			if !remoteExists {
+				return fmt.Errorf("tag %s exists locally but has not been pushed to %s, please push it before continuing or specify the `--target` flag to create a new tag",
+					opts.TagName, ghrepo.FullName(baseRepo))
+			}
+		}
+	}
+
 	if !opts.BodyProvided && opts.IO.CanPrompt() {
 		editorCommand, err := cmdutil.DetermineEditor(opts.Config)
 		if err != nil {
@@ -220,7 +246,6 @@ func createRun(opts *CreateOptions) error {
 		}
 
 		var generatedNotes *releaseNotes
-		var tagDescription string
 		var generatedChangelog string
 
 		params := map[string]interface{}{
@@ -236,7 +261,6 @@ func createRun(opts *CreateOptions) error {
 
 		if opts.RepoOverride == "" {
 			headRef := opts.TagName
-			tagDescription, _ = gitTagInfo(opts.TagName)
 			if tagDescription == "" {
 				if opts.Target != "" {
 					// TODO: use the remote-tracking version of the branch ref
@@ -366,13 +390,6 @@ func createRun(opts *CreateOptions) error {
 		}
 	}
 
-	if opts.Draft && len(opts.DiscussionCategory) > 0 {
-		return fmt.Errorf(
-			"%s Discussions not supported with draft releases",
-			opts.IO.ColorScheme().FailureIcon(),
-		)
-	}
-
 	params := map[string]interface{}{
 		"tag_name":   opts.TagName,
 		"draft":      opts.Draft,
@@ -420,7 +437,7 @@ func createRun(opts *CreateOptions) error {
 		}
 
 		if !opts.Draft {
-			rel, err := publishRelease(httpClient, newRelease.APIURL)
+			rel, err := publishRelease(httpClient, newRelease.APIURL, opts.DiscussionCategory)
 			if err != nil {
 				return err
 			}

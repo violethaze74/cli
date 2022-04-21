@@ -24,6 +24,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmd/factory"
 	"github.com/cli/cli/v2/pkg/cmd/root"
 	"github.com/cli/cli/v2/pkg/cmdutil"
+	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/cli/cli/v2/utils"
 	"github.com/cli/safeexec"
 	"github.com/mattn/go-colorable"
@@ -57,7 +58,7 @@ func mainRun() exitCode {
 		updateMessageChan <- rel
 	}()
 
-	hasDebug := os.Getenv("DEBUG") != ""
+	hasDebug, _ := utils.IsDebugEnabled()
 
 	cmdFactory := factory.New(buildVersion)
 	stderr := cmdFactory.IOStreams.ErrOut
@@ -175,7 +176,7 @@ func mainRun() exitCode {
 				}
 			}
 		}
-		for _, ext := range cmdFactory.ExtensionManager.List(false) {
+		for _, ext := range cmdFactory.ExtensionManager.List() {
 			if strings.HasPrefix(ext.Name(), toComplete) {
 				results = append(results, ext.Name())
 			}
@@ -201,6 +202,7 @@ func mainRun() exitCode {
 	rootCmd.SetArgs(expandedArgs)
 
 	if cmd, err := rootCmd.ExecuteC(); err != nil {
+		var pagerPipeError *iostreams.ErrClosedPagerPipe
 		if err == cmdutil.SilentError {
 			return exitError
 		} else if cmdutil.IsUserCancellation(err) {
@@ -211,6 +213,9 @@ func mainRun() exitCode {
 			return exitCancel
 		} else if errors.Is(err, authError) {
 			return exitAuth
+		} else if errors.As(err, &pagerPipeError) {
+			// ignore the error raised when piping to a closed pager
+			return exitOK
 		}
 
 		printError(stderr, err, cmd, hasDebug)
@@ -322,8 +327,10 @@ func checkForUpdate(currentVersion string) (*update.ReleaseInfo, error) {
 // does not depend on user configuration
 func basicClient(currentVersion string) (*api.Client, error) {
 	var opts []api.ClientOption
-	if verbose := os.Getenv("DEBUG"); verbose != "" {
-		opts = append(opts, apiVerboseLog())
+	if isVerbose, debugValue := utils.IsDebugEnabled(); isVerbose {
+		colorize := utils.IsTerminal(os.Stderr)
+		logTraffic := strings.Contains(debugValue, "api")
+		opts = append(opts, api.VerboseLog(colorable.NewColorable(os.Stderr), logTraffic, colorize))
 	}
 	opts = append(opts, api.AddHeader("User-Agent", fmt.Sprintf("GitHub CLI %s", currentVersion)))
 
@@ -337,12 +344,6 @@ func basicClient(currentVersion string) (*api.Client, error) {
 		opts = append(opts, api.AddHeader("Authorization", fmt.Sprintf("token %s", token)))
 	}
 	return api.NewClient(opts...), nil
-}
-
-func apiVerboseLog() api.ClientOption {
-	logTraffic := strings.Contains(os.Getenv("DEBUG"), "api")
-	colorize := utils.IsTerminal(os.Stderr)
-	return api.VerboseLog(colorable.NewColorable(os.Stderr), logTraffic, colorize)
 }
 
 func isRecentRelease(publishedAt time.Time) bool {

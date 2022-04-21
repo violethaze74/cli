@@ -4,20 +4,34 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/cli/cli/v2/internal/codespaces"
 	"github.com/cli/cli/v2/internal/codespaces/api"
+	"github.com/cli/cli/v2/pkg/cmdutil"
+	"github.com/cli/cli/v2/utils"
 	"github.com/spf13/cobra"
 )
 
+const (
+	DEVCONTAINER_PROMPT_DEFAULT = "Default Codespaces configuration"
+)
+
+var (
+	DEFAULT_DEVCONTAINER_DEFINITIONS = []string{".devcontainer.json", ".devcontainer/devcontainer.json"}
+)
+
 type createOptions struct {
-	repo        string
-	branch      string
-	machine     string
-	showStatus  bool
-	idleTimeout time.Duration
+	repo              string
+	branch            string
+	location          string
+	machine           string
+	showStatus        bool
+	permissionsOptOut bool
+	devContainerPath  string
+	idleTimeout       time.Duration
 }
 
 func newCreateCmd(app *App) *cobra.Command {
@@ -34,23 +48,31 @@ func newCreateCmd(app *App) *cobra.Command {
 
 	createCmd.Flags().StringVarP(&opts.repo, "repo", "r", "", "repository name with owner: user/repo")
 	createCmd.Flags().StringVarP(&opts.branch, "branch", "b", "", "repository branch")
+	createCmd.Flags().StringVarP(&opts.location, "location", "l", "", "location: {EastUs|SouthEastAsia|WestEurope|WestUs2} (determined automatically if not provided)")
 	createCmd.Flags().StringVarP(&opts.machine, "machine", "m", "", "hardware specifications for the VM")
+	createCmd.Flags().BoolVarP(&opts.permissionsOptOut, "default-permissions", "", false, "do not prompt to accept additional permissions requested by the codespace")
 	createCmd.Flags().BoolVarP(&opts.showStatus, "status", "s", false, "show status of post-create command and dotfiles")
 	createCmd.Flags().DurationVar(&opts.idleTimeout, "idle-timeout", 0, "allowed inactivity before codespace is stopped, e.g. \"10m\", \"1h\"")
+	createCmd.Flags().StringVar(&opts.devContainerPath, "devcontainer-path", "", "path to the devcontainer.json file to use when creating codespace")
 
 	return createCmd
 }
 
 // Create creates a new Codespace
 func (a *App) Create(ctx context.Context, opts createOptions) error {
-	locationCh := getLocation(ctx, a.apiClient)
+	// Overrides for Codespace developers to target test environments
+	vscsLocation := os.Getenv("VSCS_LOCATION")
+	vscsTarget := os.Getenv("VSCS_TARGET")
+	vscsTargetUrl := os.Getenv("VSCS_TARGET_URL")
 
 	userInputs := struct {
 		Repository string
 		Branch     string
+		Location   string
 	}{
 		Repository: opts.repo,
 		Branch:     opts.branch,
+		Location:   opts.location,
 	}
 
 	if userInputs.Repository == "" {
@@ -83,6 +105,10 @@ func (a *App) Create(ctx context.Context, opts createOptions) error {
 		}
 	}
 
+	if userInputs.Location == "" && vscsLocation != "" {
+		userInputs.Location = vscsLocation
+	}
+
 	a.StartProgressIndicatorWithLabel("Fetching repository")
 	repository, err := a.apiClient.GetRepository(ctx, userInputs.Repository)
 	a.StopProgressIndicator()
@@ -95,12 +121,54 @@ func (a *App) Create(ctx context.Context, opts createOptions) error {
 		branch = repository.DefaultBranch
 	}
 
-	locationResult := <-locationCh
-	if locationResult.Err != nil {
-		return fmt.Errorf("error getting codespace region location: %w", locationResult.Err)
+	devContainerPath := opts.devContainerPath
+
+	// now that we have repo+branch, we can list available devcontainer.json files (if any)
+	if opts.devContainerPath == "" {
+		a.StartProgressIndicatorWithLabel("Fetching devcontainer.json files")
+		devcontainers, err := a.apiClient.ListDevContainers(ctx, repository.ID, branch, 100)
+		a.StopProgressIndicator()
+		if err != nil {
+			return fmt.Errorf("error getting devcontainer.json paths: %w", err)
+		}
+
+		if len(devcontainers) > 0 {
+
+			// if there is only one devcontainer.json file and it is one of the default paths we can auto-select it
+			if len(devcontainers) == 1 && utils.StringInSlice(devcontainers[0].Path, DEFAULT_DEVCONTAINER_DEFINITIONS) {
+				devContainerPath = devcontainers[0].Path
+			} else {
+				promptOptions := []string{}
+
+				if !utils.StringInSlice(devcontainers[0].Path, DEFAULT_DEVCONTAINER_DEFINITIONS) {
+					promptOptions = []string{DEVCONTAINER_PROMPT_DEFAULT}
+				}
+
+				for _, devcontainer := range devcontainers {
+					promptOptions = append(promptOptions, devcontainer.Path)
+				}
+
+				devContainerPathQuestion := &survey.Question{
+					Name: "devContainerPath",
+					Prompt: &survey.Select{
+						Message: "Devcontainer definition file:",
+						Options: promptOptions,
+					},
+				}
+
+				if err := ask([]*survey.Question{devContainerPathQuestion}, &devContainerPath); err != nil {
+					return fmt.Errorf("failed to prompt: %w", err)
+				}
+			}
+		}
+
+		if devContainerPath == DEVCONTAINER_PROMPT_DEFAULT {
+			// special arg allows users to opt out of devcontainer.json selection
+			devContainerPath = ""
+		}
 	}
 
-	machine, err := getMachineName(ctx, a.apiClient, repository.ID, opts.machine, branch, locationResult.Location)
+	machine, err := getMachineName(ctx, a.apiClient, repository.ID, opts.machine, branch, userInputs.Location)
 	if err != nil {
 		return fmt.Errorf("error getting machine type: %w", err)
 	}
@@ -108,17 +176,33 @@ func (a *App) Create(ctx context.Context, opts createOptions) error {
 		return errors.New("there are no available machine types for this repository")
 	}
 
-	a.StartProgressIndicatorWithLabel("Creating codespace")
-	codespace, err := a.apiClient.CreateCodespace(ctx, &api.CreateCodespaceParams{
+	createParams := &api.CreateCodespaceParams{
 		RepositoryID:       repository.ID,
 		Branch:             branch,
 		Machine:            machine,
-		Location:           locationResult.Location,
+		Location:           userInputs.Location,
+		VSCSTarget:         vscsTarget,
+		VSCSTargetURL:      vscsTargetUrl,
 		IdleTimeoutMinutes: int(opts.idleTimeout.Minutes()),
-	})
+		DevContainerPath:   devContainerPath,
+		PermissionsOptOut:  opts.permissionsOptOut,
+	}
+
+	a.StartProgressIndicatorWithLabel("Creating codespace")
+	codespace, err := a.apiClient.CreateCodespace(ctx, createParams)
 	a.StopProgressIndicator()
+
 	if err != nil {
-		return fmt.Errorf("error creating codespace: %w", err)
+		var aerr api.AcceptPermissionsRequiredError
+		if !errors.As(err, &aerr) || aerr.AllowPermissionsURL == "" {
+			return fmt.Errorf("error creating codespace: %w", err)
+		}
+
+		codespace, err = a.handleAdditionalPermissions(ctx, createParams, aerr.AllowPermissionsURL)
+		if err != nil {
+			// this error could be a cmdutil.SilentError (in the case that the user opened the browser) so we don't want to wrap it
+			return err
+		}
 	}
 
 	if opts.showStatus {
@@ -127,8 +211,81 @@ func (a *App) Create(ctx context.Context, opts createOptions) error {
 		}
 	}
 
+	cs := a.io.ColorScheme()
+
 	fmt.Fprintln(a.io.Out, codespace.Name)
+
+	if a.io.IsStderrTTY() && codespace.IdleTimeoutNotice != "" {
+		fmt.Fprintln(a.io.ErrOut, cs.Yellow("Notice:"), codespace.IdleTimeoutNotice)
+	}
+
 	return nil
+}
+
+func (a *App) handleAdditionalPermissions(ctx context.Context, createParams *api.CreateCodespaceParams, allowPermissionsURL string) (*api.Codespace, error) {
+	var (
+		isInteractive = a.io.CanPrompt()
+		cs            = a.io.ColorScheme()
+		displayURL    = utils.DisplayURL(allowPermissionsURL)
+	)
+
+	fmt.Fprintf(a.io.ErrOut, "You must authorize or deny additional permissions requested by this codespace before continuing.\n")
+
+	if !isInteractive {
+		fmt.Fprintf(a.io.ErrOut, "%s in your browser to review and authorize additional permissions: %s\n", cs.Bold("Open this URL"), displayURL)
+		fmt.Fprintf(a.io.ErrOut, "Alternatively, you can run %q with the %q option to continue without authorizing additional permissions.\n", a.io.ColorScheme().Bold("create"), cs.Bold("--default-permissions"))
+		return nil, cmdutil.SilentError
+	}
+
+	choices := []string{
+		"Continue in browser to review and authorize additional permissions (Recommended)",
+		"Continue without authorizing additional permissions",
+	}
+
+	permsSurvey := []*survey.Question{
+		{
+			Name: "accept",
+			Prompt: &survey.Select{
+				Message: "What would you like to do?",
+				Options: choices,
+				Default: choices[0],
+			},
+			Validate: survey.Required,
+		},
+	}
+
+	var answers struct {
+		Accept string
+	}
+
+	if err := ask(permsSurvey, &answers); err != nil {
+		return nil, fmt.Errorf("error getting answers: %w", err)
+	}
+
+	// if the user chose to continue in the browser, open the URL
+	if answers.Accept == choices[0] {
+		fmt.Fprintln(a.io.ErrOut, "Please re-run the create request after accepting permissions in the browser.")
+		if err := a.browser.Browse(allowPermissionsURL); err != nil {
+			return nil, fmt.Errorf("error opening browser: %w", err)
+		}
+		// browser opened successfully but we do not know if they accepted the permissions
+		// so we must exit and wait for the user to attempt the create again
+		return nil, cmdutil.SilentError
+	}
+
+	// if the user chose to create the codespace without the permissions,
+	// we can continue with the create opting out of the additional permissions
+	createParams.PermissionsOptOut = true
+
+	a.StartProgressIndicatorWithLabel("Creating codespace")
+	codespace, err := a.apiClient.CreateCodespace(ctx, createParams)
+	a.StopProgressIndicator()
+
+	if err != nil {
+		return nil, fmt.Errorf("error creating codespace: %w", err)
+	}
+
+	return codespace, nil
 }
 
 // showStatus polls the codespace for a list of post create states and their status. It will keep polling
@@ -193,21 +350,6 @@ func (a *App) showStatus(ctx context.Context, codespace *api.Codespace) error {
 	}
 
 	return nil
-}
-
-type locationResult struct {
-	Location string
-	Err      error
-}
-
-// getLocation fetches the closest Codespace datacenter region/location to the user.
-func getLocation(ctx context.Context, apiClient apiClient) <-chan locationResult {
-	ch := make(chan locationResult, 1)
-	go func() {
-		location, err := apiClient.GetCodespaceRegionLocation(ctx)
-		ch <- locationResult{location, err}
-	}()
-	return ch
 }
 
 // getMachineName prompts the user to select the machine type, or validates the machine if non-empty.
