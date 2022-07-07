@@ -2,7 +2,8 @@ package extension
 
 import (
 	"errors"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -273,8 +274,9 @@ func TestNewCmdExtension(t *testing.T) {
 					assert.Equal(t, "", calls[0].Name)
 				}
 			},
-			isTTY:      true,
-			wantStderr: "! No installed extensions found\n",
+			isTTY:   true,
+			wantErr: true,
+			errMsg:  "no installed extensions found",
 		},
 		{
 			name: "upgrade all notty",
@@ -514,6 +516,38 @@ func TestNewCmdExtension(t *testing.T) {
 			isTTY:      false,
 			wantStdout: "",
 		},
+		{
+			name: "exec extension missing",
+			args: []string{"exec", "invalid"},
+			managerStubs: func(em *extensions.ExtensionManagerMock) func(*testing.T) {
+				em.DispatchFunc = func(args []string, stdin io.Reader, stdout, stderr io.Writer) (bool, error) {
+					return false, nil
+				}
+				return func(t *testing.T) {
+					calls := em.DispatchCalls()
+					assert.Equal(t, 1, len(calls))
+					assert.EqualValues(t, []string{"invalid"}, calls[0].Args)
+				}
+			},
+			wantErr: true,
+			errMsg:  `extension "invalid" not found`,
+		},
+		{
+			name: "exec extension with arguments",
+			args: []string{"exec", "test", "arg1", "arg2", "--flag1"},
+			managerStubs: func(em *extensions.ExtensionManagerMock) func(*testing.T) {
+				em.DispatchFunc = func(args []string, stdin io.Reader, stdout, stderr io.Writer) (bool, error) {
+					fmt.Fprintf(stdout, "test output")
+					return true, nil
+				}
+				return func(t *testing.T) {
+					calls := em.DispatchCalls()
+					assert.Equal(t, 1, len(calls))
+					assert.EqualValues(t, []string{"test", "arg1", "arg2", "--flag1"}, calls[0].Args)
+				}
+			},
+			wantStdout: "test output",
+		},
 	}
 
 	for _, tt := range tests {
@@ -550,8 +584,8 @@ func TestNewCmdExtension(t *testing.T) {
 
 			cmd := NewCmdExtension(&f)
 			cmd.SetArgs(tt.args)
-			cmd.SetOut(ioutil.Discard)
-			cmd.SetErr(ioutil.Discard)
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
 
 			_, err := cmd.ExecuteC()
 			if tt.wantErr {

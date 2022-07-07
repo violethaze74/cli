@@ -130,10 +130,6 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 				return cmdutil.FlagErrorf("`--recover` only supported when running interactively")
 			}
 
-			if !opts.IO.CanPrompt() && !opts.WebMode && !opts.TitleProvided && !opts.Autofill {
-				return cmdutil.FlagErrorf("`--title` or `--fill` required when not running interactively")
-			}
-
 			if opts.IsDraft && opts.WebMode {
 				return errors.New("the `--draft` flag is not supported with `--web`")
 			}
@@ -152,6 +148,10 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 				}
 				opts.Body = string(b)
 				opts.BodyProvided = true
+			}
+
+			if !opts.IO.CanPrompt() && !opts.WebMode && !opts.Autofill && (!opts.TitleProvided || !opts.BodyProvided) {
+				return cmdutil.FlagErrorf("must provide `--title` and `--body` (or `--fill`) when not running interactively")
 			}
 
 			if runF != nil {
@@ -312,7 +312,7 @@ func createRun(opts *CreateOptions) (err error) {
 
 	allowPreview := !state.HasMetadata() && utils.ValidURL(openURL)
 	allowMetadata := ctx.BaseRepo.ViewerCanTriage()
-	action, err := shared.ConfirmSubmission(allowPreview, allowMetadata)
+	action, err := shared.ConfirmPRSubmission(allowPreview, allowMetadata, state.Draft)
 	if err != nil {
 		return fmt.Errorf("unable to confirm: %w", err)
 	}
@@ -329,7 +329,7 @@ func createRun(opts *CreateOptions) (err error) {
 			return
 		}
 
-		action, err = shared.ConfirmSubmission(!state.HasMetadata(), false)
+		action, err = shared.ConfirmPRSubmission(!state.HasMetadata(), false, state.Draft)
 		if err != nil {
 			return
 		}
@@ -348,6 +348,11 @@ func createRun(opts *CreateOptions) (err error) {
 
 	if action == shared.PreviewAction {
 		return previewPR(*opts, openURL)
+	}
+
+	if action == shared.SubmitDraftAction {
+		state.Draft = true
+		return submitPR(*opts, *ctx, *state)
 	}
 
 	if action == shared.SubmitAction {
@@ -583,9 +588,6 @@ func NewCreateContext(opts *CreateOptions) (*CreateContext, error) {
 			return nil, cmdutil.CancelError
 		} else {
 			// "Create a fork of ..."
-			if baseRepo.IsPrivate {
-				return nil, fmt.Errorf("cannot fork private repository %s", ghrepo.FullName(baseRepo))
-			}
 			headBranchLabel = fmt.Sprintf("%s:%s", currentLogin, headBranch)
 		}
 	}

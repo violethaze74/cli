@@ -146,12 +146,36 @@ func TestNewCmdPrs(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:  "review requested flag with user",
+			input: "--review-requested user",
+			output: shared.IssuesOptions{
+				Query: search.Query{
+					Keywords:   []string{},
+					Kind:       "issues",
+					Limit:      30,
+					Qualifiers: search.Qualifiers{Type: "pr", ReviewRequested: "user"},
+				},
+			},
+		},
+		{
+			name:  "review requested flag with team",
+			input: "--review-requested org/team",
+			output: shared.IssuesOptions{
+				Query: search.Query{
+					Keywords:   []string{},
+					Kind:       "issues",
+					Limit:      30,
+					Qualifiers: search.Qualifiers{Type: "pr", TeamReviewRequested: "org/team"},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			io, _, _, _ := iostreams.Test()
+			ios, _, _, _ := iostreams.Test()
 			f := &cmdutil.Factory{
-				IOStreams: io,
+				IOStreams: ios,
 			}
 			argv, err := shlex.Split(tt.input)
 			assert.NoError(t, err)

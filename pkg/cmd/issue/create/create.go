@@ -89,7 +89,7 @@ func NewCmdCreate(f *cmdutil.Factory, runF func(*CreateOptions) error) *cobra.Co
 			opts.Interactive = !(titleProvided && bodyProvided)
 
 			if opts.Interactive && !opts.IO.CanPrompt() {
-				return cmdutil.FlagErrorf("must provide title and body when not running interactively")
+				return cmdutil.FlagErrorf("must provide `--title` and `--body` when not running interactively")
 			}
 
 			if runF != nil {
@@ -242,7 +242,7 @@ func createRun(opts *CreateOptions) (err error) {
 		}
 
 		allowPreview := !tb.HasMetadata() && utils.ValidURL(openURL)
-		action, err = prShared.ConfirmSubmission(allowPreview, repo.ViewerCanTriage())
+		action, err = prShared.ConfirmIssueSubmission(allowPreview, repo.ViewerCanTriage())
 		if err != nil {
 			err = fmt.Errorf("unable to confirm: %w", err)
 			return
@@ -260,7 +260,7 @@ func createRun(opts *CreateOptions) (err error) {
 				return
 			}
 
-			action, err = prShared.ConfirmSubmission(!tb.HasMetadata(), false)
+			action, err = prShared.ConfirmIssueSubmission(!tb.HasMetadata(), false)
 			if err != nil {
 				return
 			}

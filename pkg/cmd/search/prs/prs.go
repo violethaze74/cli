@@ -2,6 +2,7 @@ package prs
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/pkg/cmd/search/shared"
@@ -15,6 +16,7 @@ func NewCmdPrs(f *cmdutil.Factory, runF func(*shared.IssuesOptions) error) *cobr
 	var noAssignee, noLabel, noMilestone, noProject bool
 	var order, sort string
 	var appAuthor string
+	var requestedReviewer string
 	opts := &shared.IssuesOptions{
 		Browser: f.Browser,
 		Entity:  shared.PullRequests,
@@ -39,17 +41,20 @@ func NewCmdPrs(f *cmdutil.Factory, runF func(*shared.IssuesOptions) error) *cobr
 			# search pull requests matching set of keywords "fix" and "bug"
 			$ gh search prs fix bug
 
-			# search draft pull requests in cli repository 
+			# search draft pull requests in cli repository
 			$ gh search prs --repo=cli/cli --draft
 
 			# search open pull requests requesting your review
-      $ gh search prs --review-requested=@me --state=open
+			$ gh search prs --review-requested=@me --state=open
 
 			# search merged pull requests assigned to yourself
 			$ gh search prs --assignee=@me --merged
 
 			# search pull requests with numerous reactions
 			$ gh search prs --reactions=">100"
+
+			# search pull requests without label "bug"
+			$ gh search prs -- -label:bug
     `),
 		RunE: func(c *cobra.Command, args []string) error {
 			if len(args) == 0 && c.Flags().NFlag() == 0 {
@@ -95,6 +100,13 @@ func NewCmdPrs(f *cmdutil.Factory, runF func(*shared.IssuesOptions) error) *cobr
 			}
 			if c.Flags().Changed("no-project") && noProject {
 				opts.Query.Qualifiers.No = append(opts.Query.Qualifiers.No, "project")
+			}
+			if c.Flags().Changed("review-requested") {
+				if strings.Contains(requestedReviewer, "/") {
+					opts.Query.Qualifiers.TeamReviewRequested = requestedReviewer
+				} else {
+					opts.Query.Qualifiers.ReviewRequested = requestedReviewer
+				}
 			}
 			opts.Query.Keywords = args
 			if runF != nil {
@@ -153,13 +165,13 @@ func NewCmdPrs(f *cmdutil.Factory, runF func(*shared.IssuesOptions) error) *cobr
 	cmd.Flags().BoolVar(&noLabel, "no-label", false, "Filter on missing label")
 	cmd.Flags().BoolVar(&noMilestone, "no-milestone", false, "Filter on missing milestone")
 	cmd.Flags().BoolVar(&noProject, "no-project", false, "Filter on missing project")
-	cmd.Flags().StringVar(&opts.Query.Qualifiers.Org, "owner", "", "Filter on owner")
 	cmd.Flags().StringVar(&opts.Query.Qualifiers.Project, "project", "", "Filter on project board `number`")
 	cmd.Flags().StringVar(&opts.Query.Qualifiers.Reactions, "reactions", "", "Filter on `number` of reactions")
 	cmd.Flags().StringSliceVar(&opts.Query.Qualifiers.Repo, "repo", nil, "Filter on repository")
 	cmdutil.StringEnumFlag(cmd, &opts.Query.Qualifiers.State, "state", "", "", []string{"open", "closed"}, "Filter based on state")
 	cmd.Flags().StringVar(&opts.Query.Qualifiers.Team, "team-mentions", "", "Filter based on team mentions")
 	cmd.Flags().StringVar(&opts.Query.Qualifiers.Updated, "updated", "", "Filter on last updated at `date`")
+	cmd.Flags().StringVar(&opts.Query.Qualifiers.User, "owner", "", "Filter on repository owner")
 
 	// Pull request query qualifier flags
 	cmd.Flags().StringVarP(&opts.Query.Qualifiers.Base, "base", "B", "", "Filter on base branch name")
@@ -168,7 +180,7 @@ func NewCmdPrs(f *cmdutil.Factory, runF func(*shared.IssuesOptions) error) *cobr
 	cmd.Flags().StringVar(&opts.Query.Qualifiers.Merged, "merged-at", "", "Filter on merged at `date`")
 	cmd.Flags().BoolVar(&merged, "merged", false, "Filter based on merged state")
 	cmdutil.StringEnumFlag(cmd, &opts.Query.Qualifiers.Review, "review", "", "", []string{"none", "required", "approved", "changes_requested"}, "Filter based on review status")
-	cmd.Flags().StringVar(&opts.Query.Qualifiers.ReviewRequested, "review-requested", "", "Filter on `user` requested to review")
+	cmd.Flags().StringVar(&requestedReviewer, "review-requested", "", "Filter on `user` or team requested to review")
 	cmd.Flags().StringVar(&opts.Query.Qualifiers.ReviewedBy, "reviewed-by", "", "Filter on `user` who reviewed")
 	cmdutil.StringEnumFlag(cmd, &opts.Query.Qualifiers.Status, "checks", "", "", []string{"pending", "success", "failure"}, "Filter based on status of the checks")
 

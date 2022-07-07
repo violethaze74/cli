@@ -2,7 +2,7 @@ package list
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"regexp"
 	"testing"
@@ -21,13 +21,13 @@ import (
 )
 
 func runCommand(rt http.RoundTripper, isTTY bool, cli string) (*test.CmdOut, error) {
-	io, _, stdout, stderr := iostreams.Test()
-	io.SetStdoutTTY(isTTY)
-	io.SetStdinTTY(isTTY)
-	io.SetStderrTTY(isTTY)
+	ios, _, stdout, stderr := iostreams.Test()
+	ios.SetStdoutTTY(isTTY)
+	ios.SetStdinTTY(isTTY)
+	ios.SetStderrTTY(isTTY)
 
 	factory := &cmdutil.Factory{
-		IOStreams: io,
+		IOStreams: ios,
 		HttpClient: func() (*http.Client, error) {
 			return &http.Client{Transport: rt}, nil
 		},
@@ -48,8 +48,8 @@ func runCommand(rt http.RoundTripper, isTTY bool, cli string) (*test.CmdOut, err
 	cmd.SetArgs(argv)
 
 	cmd.SetIn(&bytes.Buffer{})
-	cmd.SetOut(ioutil.Discard)
-	cmd.SetErr(ioutil.Discard)
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
 
 	_, err = cmd.ExecuteC()
 	return &test.CmdOut{
@@ -125,15 +125,10 @@ func TestIssueList_tty_withFlags(t *testing.T) {
 		}))
 
 	output, err := runCommand(http, true, "-a probablyCher -s open -A foo --mention me")
-	if err != nil {
-		t.Errorf("error running command `issue list`: %v", err)
-	}
+	assert.EqualError(t, err, "no issues match your search in OWNER/REPO")
 
+	assert.Equal(t, "", output.String())
 	assert.Equal(t, "", output.Stderr())
-	assert.Equal(t, `
-No issues match your search in OWNER/REPO
-
-`, output.String())
 }
 
 func TestIssueList_tty_withAppFlag(t *testing.T) {
@@ -151,15 +146,10 @@ func TestIssueList_tty_withAppFlag(t *testing.T) {
 		}))
 
 	output, err := runCommand(http, true, "--app dependabot")
-	if err != nil {
-		t.Errorf("error running command `issue list`: %v", err)
-	}
+	assert.EqualError(t, err, "no issues match your search in OWNER/REPO")
 
+	assert.Equal(t, "", output.String())
 	assert.Equal(t, "", output.Stderr())
-	assert.Equal(t, `
-No issues match your search in OWNER/REPO
-
-`, output.String())
 }
 
 func TestIssueList_withInvalidLimitFlag(t *testing.T) {
@@ -192,9 +182,9 @@ func TestIssueList_disabledIssues(t *testing.T) {
 }
 
 func TestIssueList_web(t *testing.T) {
-	io, _, stdout, stderr := iostreams.Test()
-	io.SetStdoutTTY(true)
-	io.SetStderrTTY(true)
+	ios, _, stdout, stderr := iostreams.Test()
+	ios.SetStdoutTTY(true)
+	ios.SetStderrTTY(true)
 	browser := &cmdutil.TestBrowser{}
 
 	reg := &httpmock.Registry{}
@@ -204,7 +194,7 @@ func TestIssueList_web(t *testing.T) {
 	defer cmdTeardown(t)
 
 	err := listRun(&ListOptions{
-		IO:      io,
+		IO:      ios,
 		Browser: browser,
 		HttpClient: func() (*http.Client, error) {
 			return &http.Client{Transport: reg}, nil
@@ -227,7 +217,7 @@ func TestIssueList_web(t *testing.T) {
 
 	assert.Equal(t, "", stdout.String())
 	assert.Equal(t, "Opening github.com/OWNER/REPO/issues in your browser.\n", stderr.String())
-	browser.Verify(t, "https://github.com/OWNER/REPO/issues?q=assignee%3Apeter+author%3Ajohn+label%3Abug+label%3Adocs+mentions%3Afrank+milestone%3Av1.1+state%3Aall+type%3Aissue")
+	browser.Verify(t, "https://github.com/OWNER/REPO/issues?q=assignee%3Apeter+author%3Ajohn+label%3Abug+label%3Adocs+mentions%3Afrank+milestone%3Av1.1+type%3Aissue")
 }
 
 func Test_issueList(t *testing.T) {

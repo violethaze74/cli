@@ -225,10 +225,7 @@ func forkRun(opts *ForkOptions) error {
 	if err != nil {
 		return err
 	}
-	protocol, err := cfg.Get(repoToFork.RepoHost(), "git_protocol")
-	if err != nil {
-		return err
-	}
+	protocol, _ := cfg.Get(repoToFork.RepoHost(), "git_protocol")
 
 	if inParent {
 		remotes, err := opts.Remotes()
@@ -248,7 +245,7 @@ func forkRun(opts *ForkOptions) error {
 				if scheme != "" {
 					protocol = scheme
 				} else {
-					protocol = cfg.Default("git_protocol")
+					protocol = "https"
 				}
 			}
 		}
@@ -317,7 +314,7 @@ func forkRun(opts *ForkOptions) error {
 			}
 
 			upstreamURL := ghrepo.FormatRemoteURL(repoToFork, protocol)
-			err = git.AddUpstreamRemote(upstreamURL, cloneDir, []string{})
+			err = git.AddNamedRemote(upstreamURL, "upstream", cloneDir, []string{})
 			if err != nil {
 				return err
 			}

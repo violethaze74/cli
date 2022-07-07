@@ -118,18 +118,13 @@ func listRun(opts *ListOptions) error {
 		return opts.Exporter.Write(opts.IO, runs)
 	}
 
+	if len(runs) == 0 {
+		return cmdutil.NewNoResultsError("no runs found")
+	}
+
 	tp := utils.NewTablePrinter(opts.IO)
 
 	cs := opts.IO.ColorScheme()
-
-	if len(runs) == 0 {
-		if !opts.PlainOutput {
-			fmt.Fprintln(opts.IO.ErrOut, "No runs found")
-		}
-		return nil
-	}
-
-	out := opts.IO.Out
 
 	if !opts.PlainOutput {
 		tp.AddField("STATUS", nil, nil)
@@ -171,11 +166,6 @@ func listRun(opts *ListOptions) error {
 	err = tp.Render()
 	if err != nil {
 		return err
-	}
-
-	if !opts.PlainOutput {
-		fmt.Fprintln(out)
-		fmt.Fprintln(out, "For details on a run, try: gh run view <run-id>")
 	}
 
 	return nil
