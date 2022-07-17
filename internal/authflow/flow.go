@@ -15,8 +15,6 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/cli/cli/v2/utils"
-	"github.com/cli/go-gh"
-	ghAPI "github.com/cli/go-gh/pkg/api"
 	"github.com/cli/oauth"
 	"github.com/henvic/httpretty"
 )
@@ -139,9 +137,17 @@ func authFlow(oauthHost string, IO *iostreams.IOStreams, notice string, addition
 	return token.Token, userLogin, nil
 }
 
+type cfg struct {
+	authToken string
+}
+
+func (c cfg) AuthToken(hostname string) (string, string) {
+	return c.authToken, "oauth_token"
+}
+
 func getViewer(hostname, token string) (string, error) {
-	opts := ghAPI.ClientOptions{Host: hostname, AuthToken: token}
-	client, err := gh.HTTPClient(&opts)
+	opts := api.HTTPClientOptions{Config: cfg{authToken: token}}
+	client, err := api.NewHTTPClient(opts)
 	if err != nil {
 		return "", err
 	}

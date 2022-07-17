@@ -15,7 +15,7 @@ require (
 	github.com/cli/shurcooL-graphql v0.0.1
 	github.com/cpuguy83/go-md2man/v2 v2.0.2
 	github.com/creack/pty v1.1.18
-	github.com/gabriel-vasile/mimetype v1.4.0
+	github.com/gabriel-vasile/mimetype v1.4.1
 	github.com/google/go-cmp v0.5.8
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/gorilla/websocket v1.4.2
@@ -51,6 +51,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/fatih/color v1.7.0 // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
@@ -66,8 +67,9 @@ require (
 	github.com/stretchr/objx v0.4.0 // indirect
 	github.com/yuin/goldmark v1.4.4 // indirect
 	github.com/yuin/goldmark-emoji v1.0.1 // indirect
-	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
+	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e // indirect
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a // indirect
+	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )
 
 replace golang.org/x/crypto => github.com/cli/crypto v0.0.0-20210929142629-6be313f59b03
