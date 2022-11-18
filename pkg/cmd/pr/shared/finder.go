@@ -16,11 +16,9 @@ import (
 	remotes "github.com/cli/cli/v2/context"
 	"github.com/cli/cli/v2/git"
 	fd "github.com/cli/cli/v2/internal/featuredetection"
-	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/set"
-	graphql "github.com/cli/shurcooL-graphql"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/sync/errgroup"
 )
@@ -55,12 +53,14 @@ func NewFinder(factory *cmdutil.Factory) PRFinder {
 	}
 
 	return &finder{
-		baseRepoFn:   factory.BaseRepo,
-		branchFn:     factory.Branch,
-		remotesFn:    factory.Remotes,
-		httpClient:   factory.HttpClient,
-		progress:     factory.IOStreams,
-		branchConfig: git.ReadBranchConfig,
+		baseRepoFn: factory.BaseRepo,
+		branchFn:   factory.Branch,
+		remotesFn:  factory.Remotes,
+		httpClient: factory.HttpClient,
+		progress:   factory.IOStreams,
+		branchConfig: func(s string) git.BranchConfig {
+			return factory.GitClient.ReadBranchConfig(context.Background(), s)
+		},
 	}
 }
 
@@ -365,11 +365,11 @@ func preloadPrReviews(httpClient *http.Client, repo ghrepo.Interface, pr *api.Pu
 		"endCursor": githubv4.String(pr.Reviews.PageInfo.EndCursor),
 	}
 
-	gql := graphql.NewClient(ghinstance.GraphQLEndpoint(repo.RepoHost()), httpClient)
+	gql := api.NewClientFromHTTP(httpClient)
 
 	for {
 		var query response
-		err := gql.QueryNamed(context.Background(), "ReviewsForPullRequest", &query, variables)
+		err := gql.Query(repo.RepoHost(), "ReviewsForPullRequest", &query, variables)
 		if err != nil {
 			return err
 		}
@@ -405,11 +405,11 @@ func preloadPrComments(client *http.Client, repo ghrepo.Interface, pr *api.PullR
 		"endCursor": githubv4.String(pr.Comments.PageInfo.EndCursor),
 	}
 
-	gql := graphql.NewClient(ghinstance.GraphQLEndpoint(repo.RepoHost()), client)
+	gql := api.NewClientFromHTTP(client)
 
 	for {
 		var query response
-		err := gql.QueryNamed(context.Background(), "CommentsForPullRequest", &query, variables)
+		err := gql.Query(repo.RepoHost(), "CommentsForPullRequest", &query, variables)
 		if err != nil {
 			return err
 		}

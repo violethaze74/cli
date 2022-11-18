@@ -2,9 +2,9 @@ package clone
 
 import (
 	"net/http"
-	"strings"
 	"testing"
 
+	"github.com/cli/cli/v2/git"
 	"github.com/cli/cli/v2/internal/config"
 	"github.com/cli/cli/v2/internal/run"
 	"github.com/cli/cli/v2/pkg/cmdutil"
@@ -104,6 +104,10 @@ func runCloneCommand(httpClient *http.Client, cli string) (*test.CmdOut, error) 
 		Config: func() (config.Config, error) {
 			return config.NewBlankConfig(), nil
 		},
+		GitClient: &git.Client{
+			GhPath:  "some/path/gh",
+			GitPath: "some/path/git",
+		},
 	}
 
 	cmd := NewCmdClone(fac, nil)
@@ -200,9 +204,7 @@ func Test_RepoClone(t *testing.T) {
 
 			cs, restore := run.Stub()
 			defer restore(t)
-			cs.Register(`git clone`, 0, "", func(s []string) {
-				assert.Equal(t, tt.want, strings.Join(s, " "))
-			})
+			cs.Register(tt.want, 0, "")
 
 			output, err := runCloneCommand(httpClient, tt.args)
 			if err != nil {

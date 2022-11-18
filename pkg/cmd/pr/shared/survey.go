@@ -6,9 +6,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/cli/cli/v2/api"
-	"github.com/cli/cli/v2/git"
 	"github.com/cli/cli/v2/internal/ghrepo"
-	"github.com/cli/cli/v2/pkg/githubtemplate"
 	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/cli/cli/v2/pkg/prompt"
 	"github.com/cli/cli/v2/pkg/surveyext"
@@ -71,6 +69,7 @@ func confirmSubmission(allowPreview, allowMetadata, allowDraft, isDraft bool) (A
 		},
 	}
 
+	//nolint:staticcheck // SA1019: prompt.SurveyAsk is deprecated: use Prompter
 	err := prompt.SurveyAsk(confirmQs, &confirmAnswers)
 	if err != nil {
 		return -1, fmt.Errorf("could not prompt: %w", err)
@@ -122,6 +121,7 @@ func BodySurvey(state *IssueMetadataState, templateContent, editorCommand string
 		},
 	}
 
+	//nolint:staticcheck // SA1019: prompt.SurveyAsk is deprecated: use Prompter
 	err := prompt.SurveyAsk(qs, state)
 	if err != nil {
 		return err
@@ -148,6 +148,7 @@ func TitleSurvey(state *IssueMetadataState) error {
 		},
 	}
 
+	//nolint:staticcheck // SA1019: prompt.SurveyAsk is deprecated: use Prompter
 	err := prompt.SurveyAsk(qs, state)
 	if err != nil {
 		return err
@@ -197,6 +198,7 @@ func MetadataSurvey(io *iostreams.IOStreams, baseRepo ghrepo.Interface, fetcher 
 	}
 	extraFieldsOptions = append(extraFieldsOptions, "Assignees", "Labels", "Projects", "Milestone")
 
+	//nolint:staticcheck // SA1019: prompt.SurveyAsk is deprecated: use Prompter
 	err := prompt.SurveyAsk([]*survey.Question{
 		{
 			Name: "metadata",
@@ -327,6 +329,7 @@ func MetadataSurvey(io *iostreams.IOStreams, baseRepo ghrepo.Interface, fetcher 
 		Milestone string
 	}{}
 
+	//nolint:staticcheck // SA1019: prompt.SurveyAsk is deprecated: use Prompter
 	err = prompt.SurveyAsk(mqs, &values)
 	if err != nil {
 		return fmt.Errorf("could not prompt: %w", err)
@@ -363,19 +366,4 @@ func MetadataSurvey(io *iostreams.IOStreams, baseRepo ghrepo.Interface, fetcher 
 	}
 
 	return nil
-}
-
-func FindTemplates(dir, path string) ([]string, string) {
-	if dir == "" {
-		rootDir, err := git.ToplevelDir()
-		if err != nil {
-			return []string{}, ""
-		}
-		dir = rootDir
-	}
-
-	templateFiles := githubtemplate.FindNonLegacy(dir, path)
-	legacyTemplate := githubtemplate.FindLegacy(dir, path)
-
-	return templateFiles, legacyTemplate
 }

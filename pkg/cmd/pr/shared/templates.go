@@ -10,22 +10,18 @@ import (
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/git"
 	fd "github.com/cli/cli/v2/internal/featuredetection"
-	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/pkg/githubtemplate"
 	"github.com/cli/cli/v2/pkg/prompt"
-	graphql "github.com/cli/shurcooL-graphql"
 	"github.com/shurcooL/githubv4"
 )
 
 type issueTemplate struct {
-	// I would have un-exported these fields, except `cli/shurcool-graphql` then cannot unmarshal them :/
 	Gname string `graphql:"name"`
 	Gbody string `graphql:"body"`
 }
 
 type pullRequestTemplate struct {
-	// I would have un-exported these fields, except `cli/shurcool-graphql` then cannot unmarshal them :/
 	Gname string `graphql:"filename"`
 	Gbody string `graphql:"body"`
 }
@@ -66,9 +62,9 @@ func listIssueTemplates(httpClient *http.Client, repo ghrepo.Interface) ([]Templ
 		"name":  githubv4.String(repo.RepoName()),
 	}
 
-	gql := graphql.NewClient(ghinstance.GraphQLEndpoint(repo.RepoHost()), httpClient)
+	gql := api.NewClientFromHTTP(httpClient)
 
-	err := gql.QueryNamed(context.Background(), "IssueTemplates", &query, variables)
+	err := gql.Query(repo.RepoHost(), "IssueTemplates", &query, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -94,9 +90,9 @@ func listPullRequestTemplates(httpClient *http.Client, repo ghrepo.Interface) ([
 		"name":  githubv4.String(repo.RepoName()),
 	}
 
-	gql := graphql.NewClient(ghinstance.GraphQLEndpoint(repo.RepoHost()), httpClient)
+	gql := api.NewClientFromHTTP(httpClient)
 
-	err := gql.QueryNamed(context.Background(), "PullRequestTemplates", &query, variables)
+	err := gql.Query(repo.RepoHost(), "PullRequestTemplates", &query, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +185,7 @@ func (m *templateManager) Choose() (Template, error) {
 	}
 
 	var selectedOption int
+	//nolint:staticcheck // SA1019: prompt.SurveyAskOne is deprecated: use Prompter
 	err := prompt.SurveyAskOne(&survey.Select{
 		Message: "Choose a template",
 		Options: append(names, blankOption),
@@ -237,7 +234,8 @@ func (m *templateManager) fetch() error {
 	dir := m.rootDir
 	if dir == "" {
 		var err error
-		dir, err = git.ToplevelDir()
+		gitClient := &git.Client{}
+		dir, err = gitClient.ToplevelDir(context.Background())
 		if err != nil {
 			return nil // abort silently
 		}
