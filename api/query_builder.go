@@ -184,7 +184,8 @@ func StatusCheckRollupGraphQLWithoutCountByState(after string) string {
 								context,
 								state,
 								targetUrl,
-								createdAt
+								createdAt,
+								description
 							},
 							...on CheckRun {
 								name,
@@ -204,10 +205,14 @@ func StatusCheckRollupGraphQLWithoutCountByState(after string) string {
 	}`), afterClause)
 }
 
-func RequiredStatusCheckRollupGraphQL(prID, after string) string {
+func RequiredStatusCheckRollupGraphQL(prID, after string, includeEvent bool) string {
 	var afterClause string
 	if after != "" {
 		afterClause = ",after:" + after
+	}
+	eventField := "event,"
+	if !includeEvent {
+		eventField = ""
 	}
 	return fmt.Sprintf(shortenQuery(`
 	statusCheckRollup: commits(last: 1) {
@@ -222,11 +227,12 @@ func RequiredStatusCheckRollupGraphQL(prID, after string) string {
 								state,
 								targetUrl,
 								createdAt,
+								description,
 								isRequired(pullRequestId: %[2]s)
 							},
 							...on CheckRun {
 								name,
-								checkSuite{workflowRun{workflow{name}}},
+								checkSuite{workflowRun{%[3]sworkflow{name}}},
 								status,
 								conclusion,
 								startedAt,
@@ -240,7 +246,7 @@ func RequiredStatusCheckRollupGraphQL(prID, after string) string {
 				}
 			}
 		}
-	}`), afterClause, prID)
+	}`), afterClause, prID, eventField)
 }
 
 var IssueFields = []string{

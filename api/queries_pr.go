@@ -183,16 +183,10 @@ type CheckContexts struct {
 }
 
 type CheckContext struct {
-	TypeName   string `json:"__typename"`
-	Name       string `json:"name"`
-	IsRequired bool   `json:"isRequired"`
-	CheckSuite struct {
-		WorkflowRun struct {
-			Workflow struct {
-				Name string `json:"name"`
-			} `json:"workflow"`
-		} `json:"workflowRun"`
-	} `json:"checkSuite"`
+	TypeName   string     `json:"__typename"`
+	Name       string     `json:"name"`
+	IsRequired bool       `json:"isRequired"`
+	CheckSuite CheckSuite `json:"checkSuite"`
 	// QUEUED IN_PROGRESS COMPLETED WAITING PENDING REQUESTED
 	Status string `json:"status"`
 	// ACTION_REQUIRED TIMED_OUT CANCELLED FAILURE SUCCESS NEUTRAL SKIPPED STARTUP_FAILURE STALE
@@ -202,12 +196,25 @@ type CheckContext struct {
 	DetailsURL  string               `json:"detailsUrl"`
 
 	/* StatusContext fields */
-
-	Context string `json:"context"`
+	Context     string `json:"context"`
+	Description string `json:"description"`
 	// EXPECTED ERROR FAILURE PENDING SUCCESS
 	State     StatusState `json:"state"`
 	TargetURL string      `json:"targetUrl"`
 	CreatedAt time.Time   `json:"createdAt"`
+}
+
+type CheckSuite struct {
+	WorkflowRun WorkflowRun `json:"workflowRun"`
+}
+
+type WorkflowRun struct {
+	Event    string   `json:"event"`
+	Workflow Workflow `json:"workflow"`
+}
+
+type Workflow struct {
+	Name string `json:"name"`
 }
 
 type PRRepository struct {
